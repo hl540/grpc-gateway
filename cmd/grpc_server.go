@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/hl540/grpc-gateway/proto/helloworld"
-	"github.com/hl540/grpc-gateway/src/register/etcd"
+	"github.com/hl540/grpc-gateway/src/naming/registrar/etcd"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"google.golang.org/grpc"
 )
@@ -62,7 +62,7 @@ func main() {
 		log.Fatal(s.Serve(lis))
 	}()
 
-	registrar := etcd.NewEtcdRegister(context.Background(), etcdClient, *name, *addr, 5)
+	registrar := etcd.NewRegistrar(context.Background(), etcdClient, *name, *addr, 5)
 	go func() {
 		if err := registrar.Register(); err != nil {
 			log.Fatalf("服务注册失败, %s\n", err.Error())

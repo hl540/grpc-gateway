@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/hl540/grpc-gateway/src/register"
+	"github.com/hl540/grpc-gateway/src/naming/registrar"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.etcd.io/etcd/client/v3/naming/endpoints"
 )
@@ -22,7 +22,7 @@ type etcdRegistrar struct {
 	em          endpoints.Manager
 }
 
-func NewEtcdRegister(ctx context.Context, client *clientv3.Client, serviceName, serviceAddr string, ttl int64) register.Registrar {
+func NewRegistrar(ctx context.Context, client *clientv3.Client, serviceName, serviceAddr string, ttl int64) registrar.Registrar {
 	ctx, cancel := context.WithCancel(ctx)
 	return &etcdRegistrar{
 		ctx:         ctx,
@@ -34,8 +34,7 @@ func NewEtcdRegister(ctx context.Context, client *clientv3.Client, serviceName, 
 	}
 }
 
-// Register 服务注册
-func (r *etcdRegistrar) Register() error {
+func (r *etcdRegistrar) register() error {
 	// 创建lease
 	lease, err := r.etcd.Grant(r.ctx, 5)
 	if err != nil {
@@ -57,13 +56,26 @@ func (r *etcdRegistrar) Register() error {
 			Addr:     r.serviceAddr,
 			Metadata: nil,
 		},
-		clientv3.WithLease(lease.ID),
+		clientv3.WithLease(r.leaseId),
 	)
-	// 续租
-	r.keepAliveCh, err = r.etcd.KeepAlive(r.ctx, r.leaseId)
 	if err != nil {
 		return err
 	}
+
+	// 续租
+	r.keepAliveCh, err = r.etcd.KeepAlive(r.ctx, r.leaseId)
+	return err
+}
+
+// Register 服务注册
+func (r *etcdRegistrar) Register() error {
+	// 注册服务
+	err := r.register()
+	if err != nil {
+		return err
+	}
+
+	// 监听续租状态
 	go r.watch()
 	return nil
 }
@@ -72,9 +84,13 @@ func (r *etcdRegistrar) Register() error {
 func (r *etcdRegistrar) watch() {
 	for {
 		select {
-		case c, ok := <-r.keepAliveCh:
-			if !ok {
-				log.Println("续租状态,TTL:0")
+		case c := <-r.keepAliveCh:
+			if c == nil {
+				// 重新注册
+				if err := r.register(); err != nil {
+					log.Printf("重新注册失败,err:%s\n", err.Error())
+				}
+				log.Println("重新注册服务")
 			} else {
 				log.Printf("续租状态,TTL:%d", c.TTL)
 			}
