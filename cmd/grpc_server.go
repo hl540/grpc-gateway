@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"flag"
+	"fmt"
 	"log"
 	"net"
 	"os"
@@ -26,7 +27,9 @@ func NewServer() *Server {
 
 func (s *Server) SayHello(ctx context.Context, in *helloworld.HelloRequest) (*helloworld.HelloReply, error) {
 	log.Println(in.Name)
-	return &helloworld.HelloReply{Message: in.Name + " world"}, nil
+	return &helloworld.HelloReply{
+		Message: fmt.Sprintf("%s world of %s", in.Name, *addr),
+	}, nil
 }
 
 var etcdClient *clientv3.Client
